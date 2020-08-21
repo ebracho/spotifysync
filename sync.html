@@ -20,6 +20,7 @@
     <p id="artist"></p>
     <p id="album"></p>
     <p id="song"></p>
+    <input type="range" id="volume" name="volume" min="0" max="20"></input>
   </div>
 
   <script src="https://sdk.scdn.co/spotify-player.js"></script>
@@ -41,7 +42,6 @@
       if (expiry == "") {
         return true;
       }
-      console.log(expiry, Date.now() / 1000);
       return (Date.now() / 1000) > (parseInt(expiry));
     }
 
@@ -86,12 +86,14 @@
       player.addListener('player_state_changed', state => {
         if (state.paused) {
           document.getElementById('not-playing').style.display = 'block'
+          document.getElementById('volume').style.display = 'none'
           document.getElementById("albumart").src = ''
           document.getElementById("artist").innerHTML = ''
           document.getElementById("album").innerHTML = ''
           document.getElementById("song").innerHTML = ''
         } else {
           document.getElementById('not-playing').style.display = 'none'
+          document.getElementById('volume').style.display = 'absolute'
           document.getElementById("albumart").src = state.track_window.current_track.album.images[0].url
           document.getElementById("artist").innerHTML = 'Artist: ' + state.track_window.current_track.artists[0].name
           document.getElementById("album").innerHTML = 'Album: ' + state.track_window.current_track.album.name
@@ -99,9 +101,14 @@
         }
       });
 
-      // Ready
       player.addListener('ready', ({ device_id }) => {
-        console.log('Ready with Device ID', device_id);
+
+        // Intialize volume and add listener to slider
+        volSlider = document.getElementById('volume')
+        player.setVolume(volSlider.value / (volSlider.max - volSlider.min))
+        document.getElementById('volume').oninput = function () {
+          player.setVolume(this.value / (this.max - this.min))
+        }
 
         function setTrack(uri, position_ms) {
           fetch(`https://api.spotify.com/v1/me/player/play?device_id=${device_id}`, {
@@ -121,8 +128,6 @@
           currentlyPlaying()
             .then(remote => {
               player.getCurrentState().then(state => {
-                console.log('Remote: ', remote)
-                console.log('State: ', state)
                 if (!state) {
                   if (remote.is_playing) {
                     setTrack(remote.item.uri, remote.progress_ms)
@@ -130,7 +135,6 @@
                   return
                 }
                 if (!remote.is_playing && !state.paused) {
-                  player.pause().then(() => console.log("Paused"))
                   return
                 }
                 if (state.paused
@@ -149,12 +153,6 @@
         setInterval(syncWebplayer, 10000)
       });
 
-      // Not Ready
-      player.addListener('not_ready', ({ device_id }) => {
-        console.log('Device ID has gone offline', device_id);
-      });
-
-      // Connect to the player!
       player.connect();
     };
   </script>
