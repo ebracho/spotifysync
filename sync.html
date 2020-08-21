@@ -66,6 +66,11 @@
     async function currentlyPlaying() {
       let response = await fetch('/currentTrack?user=' + user());
       let data = await response.json();
+      if (data.is_playing) {
+        // add this attribute to account for progress since the data was originally fetched from spotify
+        data.adjusted_progress_ms = data.progress_ms + (Date.now() - (data.fetched * 1000))
+      }
+      console.log(data)
       return data
     }
 
@@ -130,7 +135,7 @@
               player.getCurrentState().then(state => {
                 if (!state) {
                   if (remote.is_playing) {
-                    setTrack(remote.item.uri, remote.progress_ms)
+                    setTrack(remote.item.uri, remote.adjusted_progress_ms)
                   }
                   return
                 }
@@ -139,7 +144,7 @@
                 }
                 if (state.paused
                   || (remote.item.uri != state.track_window.current_track.uri)
-                  || (Math.abs(remote.progress_ms - state.position) > 10000)
+                  || (Math.abs(remote.adjusted_progress_ms - state.position) > 10000)
                 ) {
                   setTrack(remote.item.uri, remote.progress_ms)
                   return
