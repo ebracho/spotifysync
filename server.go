@@ -146,7 +146,7 @@ func (s *SpotifySyncServer) PermitSharer(w http.ResponseWriter, req *http.Reques
 }
 
 func (s *SpotifySyncServer) Sync(w http.ResponseWriter, req *http.Request) {
-	http.ServeFile(w, req, "./sync.html")
+	http.ServeFile(w, req, "./static/sync.html")
 }
 
 func (s *SpotifySyncServer) Home(w http.ResponseWriter, req *http.Request) {
