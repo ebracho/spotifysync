@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Spotify Web Playback SDK Quick Start Tutorial</title>
+</head>
+
+<style>
+  body {
+    background-color: #232931;
+  }
+</style>
+
+<body>
+  <a href="https://github.com/ebracho/spotifysync"><img src="/static/GitHub-Mark-64px.png"></img></a>
+  <div style='text-align: center; color: white;'>
+    <h1>Spotify Sync - Listen Along With Me!</h1>
+    <p id="not-playing">Nothing playing right now :(</p>
+    <img id="albumart"><img>
+    <p id="artist"></p>
+    <p id="album"></p>
+    <p id="song"></p>
+  </div>
+
+  <script src="https://sdk.scdn.co/spotify-player.js"></script>
+  <script>
+    function getCookie(key) {
+      const match = document.cookie.split('; ').find(row => row.startsWith(key + '='));
+      if (match == undefined) {
+        return '';
+      }
+      return match.split('=')[1];
+    }
+
+    function loggedIn() {
+      return getCookie('access_token') != '';
+    }
+
+    function tokenExpired() {
+      const expiry = getCookie('expiry');
+      if (expiry == "") {
+        return true;
+      }
+      console.log(expiry, Date.now() / 1000);
+      return (Date.now() / 1000) > (parseInt(expiry));
+    }
+
+    function user() {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get('user');
+    }
+
+    function login() {
+      document.cookie = 'nextSyncUser=' + user();
+      window.location.href = '/login';
+    }
+
+    function getToken() {
+      if (tokenExpired()) {
+        login();
+      }
+      return getCookie('access_token');
+    }
+
+    // Fetch metadata about track currently being played by the user we're syncing to
+    async function currentlyPlaying() {
+      let response = await fetch('/currentTrack?user=' + user());
+      let data = await response.json();
+      return data
+    }
+
+    window.onSpotifyWebPlaybackSDKReady = () => {
+      const token = getCookie("accessToken");
+      const player = new Spotify.Player({
+        name: 'Web Playback SDK Quick Start Player',
+        getOAuthToken: cb => { cb(getToken()); }
+      });
+
+      // Error handling
+      player.addListener('initialization_error', ({ message }) => { console.error(message); });
+      player.addListener('authentication_error', ({ message }) => { console.error(message); });
+      player.addListener('account_error', ({ message }) => { console.error(message); });
+      player.addListener('playback_error', ({ message }) => { console.error(message); });
+
+      // Playback status updates
+      player.addListener('player_state_changed', state => {
+        if (state.paused) {
+          document.getElementById('not-playing').style.display = 'block'
+          document.getElementById("albumart").src = ''
+          document.getElementById("artist").innerHTML = ''
+          document.getElementById("album").innerHTML = ''
+          document.getElementById("song").innerHTML = ''
+        } else {
+          document.getElementById('not-playing').style.display = 'none'
+          document.getElementById("albumart").src = state.track_window.current_track.album.images[0].url
+          document.getElementById("artist").innerHTML = 'Artist: ' + state.track_window.current_track.artists[0].name
+          document.getElementById("album").innerHTML = 'Album: ' + state.track_window.current_track.album.name
+          document.getElementById("song").innerHTML = 'Song: ' + state.track_window.current_track.name
+        }
+      });
+
+      // Ready
+      player.addListener('ready', ({ device_id }) => {
+        console.log('Ready with Device ID', device_id);
+
+        function setTrack(uri, position_ms) {
+          fetch(`https://api.spotify.com/v1/me/player/play?device_id=${device_id}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              uris: [uri],
+              position_ms: position_ms,
+            }),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + getToken(),
+            },
+          })
+        }
+
+        function syncWebplayer() {
+          currentlyPlaying()
+            .then(remote => {
+              player.getCurrentState().then(state => {
+                console.log('Remote: ', remote)
+                console.log('State: ', state)
+                if (!state) {
+                  if (remote.is_playing) {
+                    setTrack(remote.item.uri, remote.progress_ms)
+                  }
+                  return
+                }
+                if (!remote.is_playing && !state.paused) {
+                  player.pause().then(() => console.log("Paused"))
+                  return
+                }
+                if (state.paused
+                  || (remote.item.uri != state.track_window.current_track.uri)
+                  || (Math.abs(remote.progress_ms - state.position) > 10000)
+                ) {
+                  setTrack(remote.item.uri, remote.progress_ms)
+                  return
+                }
+              })
+            })
+            .catch(reason => console.log(reason.message))
+        }
+
+        syncWebplayer()
+        setInterval(syncWebplayer, 10000)
+      });
+
+      // Not Ready
+      player.addListener('not_ready', ({ device_id }) => {
+        console.log('Device ID has gone offline', device_id);
+      });
+
+      // Connect to the player!
+      player.connect();
+    };
+  </script>
+</body>
+
+</html>

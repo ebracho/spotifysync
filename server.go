@@ -6,7 +6,10 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"strconv"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 type SpotifySyncServer struct {
@@ -37,6 +40,7 @@ func (s *SpotifySyncServer) CurrentTrack(w http.ResponseWriter, req *http.Reques
 	}
 }
 
+// initiate spotify 3-legged oauth
 func (s *SpotifySyncServer) Login(w http.ResponseWriter, req *http.Request) {
 	state := generateRandomState()
 	http.SetCookie(w, &http.Cookie{
@@ -47,6 +51,7 @@ func (s *SpotifySyncServer) Login(w http.ResponseWriter, req *http.Request) {
 	http.Redirect(w, req, s.Cfg.Oauth2Cfg.AuthCodeURL(state), http.StatusSeeOther)
 }
 
+// spotify oauth2 callback
 func (s *SpotifySyncServer) Callback(w http.ResponseWriter, req *http.Request) {
 	code := req.URL.Query().Get("code")
 	if code == "" {
@@ -75,16 +80,17 @@ func (s *SpotifySyncServer) Callback(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:  "accessToken",
-		Value: token.AccessToken,
-	})
-	http.SetCookie(w, &http.Cookie{
-		Name:  "refreshToken",
-		Value: token.RefreshToken,
-	})
+	setTokenCookies(w, token)
 
-	http.Redirect(w, req, "/", http.StatusSeeOther)
+	next, err := req.Cookie("nextSyncUser")
+	if err != nil {
+		http.Redirect(w, req, "/", http.StatusSeeOther)
+	}
+	http.Redirect(w, req, fmt.Sprintf("/sync?user=%s", next.Value), http.StatusSeeOther)
+}
+
+func (s *SpotifySyncServer) Sync(w http.ResponseWriter, req *http.Request) {
+	http.ServeFile(w, req, "./sync.html")
 }
 
 func (s *SpotifySyncServer) Home(w http.ResponseWriter, req *http.Request) {
@@ -93,9 +99,27 @@ func (s *SpotifySyncServer) Home(w http.ResponseWriter, req *http.Request) {
 
 func (s *SpotifySyncServer) RegisterHandlers() {
 	http.HandleFunc("/", s.Home)
+	http.HandleFunc("/sync", s.Sync)
 	http.HandleFunc("/currentTrack", s.CurrentTrack)
 	http.HandleFunc("/login", s.Login)
 	http.HandleFunc("/spotifyCallback", s.Callback)
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
+}
+
+func setTokenCookies(w http.ResponseWriter, token *oauth2.Token) {
+	http.SetCookie(w, &http.Cookie{
+		Name:  "access_token",
+		Value: token.AccessToken,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:  "refresh_token",
+		Value: token.RefreshToken,
+	})
+	log.Println(token.Expiry.Unix())
+	http.SetCookie(w, &http.Cookie{
+		Name:  "expiry",
+		Value: strconv.Itoa(int(token.Expiry.Unix())),
+	})
 }
 
 func generateRandomState() string {

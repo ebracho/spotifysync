@@ -22,6 +22,10 @@ func main() {
 			RedirectURL: "http://localhost:8999/spotifyCallback",
 			Scopes: []string{
 				"user-read-currently-playing",
+				"streaming",
+				"user-read-email",
+				"user-read-private",
+				"user-modify-playback-state",
 			},
 		},
 		RegisteredUsers: map[string]spotifysync.User{
@@ -37,10 +41,8 @@ func main() {
 		ListenAddress: "localhost:8999",
 	}
 	srv := spotifysync.SpotifySyncServer{
-		SpotifyClient: &spotifysync.SpotifyClient{
-			Cfg: cfg,
-		},
-		Cfg: cfg,
+		SpotifyClient: spotifysync.NewSpotifyClient(cfg),
+		Cfg:           cfg,
 	}
 	srv.RegisterHandlers()
 	if err := http.ListenAndServe(cfg.ListenAddress, nil); err != nil {
