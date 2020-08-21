@@ -89,16 +89,14 @@
 
       // Playback status updates
       player.addListener('player_state_changed', state => {
-        if (state.paused) {
+        if (!state || state.paused) {
           document.getElementById('not-playing').style.display = 'block'
-          document.getElementById('volume').style.display = 'none'
           document.getElementById("albumart").src = ''
           document.getElementById("artist").innerHTML = ''
           document.getElementById("album").innerHTML = ''
           document.getElementById("song").innerHTML = ''
         } else {
           document.getElementById('not-playing').style.display = 'none'
-          document.getElementById('volume').style.display = 'absolute'
           document.getElementById("albumart").src = state.track_window.current_track.album.images[0].url
           document.getElementById("artist").innerHTML = 'Artist: ' + state.track_window.current_track.artists[0].name
           document.getElementById("album").innerHTML = 'Album: ' + state.track_window.current_track.album.name
