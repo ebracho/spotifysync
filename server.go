@@ -14,7 +14,7 @@ import (
 
 type SpotifySyncServer struct {
 	SpotifyClient *SpotifyClient
-	Cfg           Config
+	Cfg           *Config
 }
 
 func (s *SpotifySyncServer) CurrentTrack(w http.ResponseWriter, req *http.Request) {
@@ -23,7 +23,9 @@ func (s *SpotifySyncServer) CurrentTrack(w http.ResponseWriter, req *http.Reques
 		http.Error(w, "missing query param 'user'", http.StatusBadRequest)
 		return
 	}
+	s.Cfg.Lock()
 	user, ok := s.Cfg.RegisteredUsers[userID]
+	s.Cfg.Unlock()
 	if !ok {
 		http.Error(w, "user not registered", http.StatusNotFound)
 		return
@@ -48,7 +50,9 @@ func (s *SpotifySyncServer) Login(w http.ResponseWriter, req *http.Request) {
 		Value:   state,
 		Expires: time.Now().Add(10 * time.Minute),
 	})
+	s.Cfg.Lock()
 	http.Redirect(w, req, s.Cfg.Oauth2Cfg.AuthCodeURL(state), http.StatusSeeOther)
+	s.Cfg.Unlock()
 }
 
 // spotify oauth2 callback
@@ -73,7 +77,9 @@ func (s *SpotifySyncServer) Callback(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	s.Cfg.Lock()
 	token, err := s.Cfg.Oauth2Cfg.Exchange(req.Context(), code)
+	s.Cfg.Unlock()
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		log.Printf("error exchanging code for token: %s\n", err)
@@ -87,6 +93,56 @@ func (s *SpotifySyncServer) Callback(w http.ResponseWriter, req *http.Request) {
 		http.Redirect(w, req, "/", http.StatusSeeOther)
 	}
 	http.Redirect(w, req, fmt.Sprintf("/sync?user=%s", next.Value), http.StatusSeeOther)
+
+	// Fetch user info to check if we need to register them as a sharer
+	user, err := s.SpotifyClient.UserFromToken(req.Context(), token)
+	if err != nil {
+		log.Printf("ERROR fetching user: %s\n", err)
+		return
+	}
+	s.Cfg.Lock()
+	defer s.Cfg.Unlock()
+	if !stringSliceContains(s.Cfg.PermittedSharers, user.ID) {
+		return
+	}
+	if _, ok := s.Cfg.RegisteredUsers[user.ID]; !ok {
+		s.Cfg.RegisteredUsers[user.ID] = user
+		s.Cfg.Save()
+	}
+}
+
+func (s *SpotifySyncServer) PermitSharer(w http.ResponseWriter, req *http.Request) {
+	sharer := req.URL.Query().Get("sharer")
+	if sharer == "" {
+		http.Error(w, "missing query param 'sharer'", http.StatusBadRequest)
+		return
+	}
+	token, err := tokenFromCookies(req)
+	if err != nil {
+		http.Error(w, "must be logged in", http.StatusUnauthorized)
+		log.Printf("ERROR registering sharer: %s\n", err)
+		return
+	}
+	user, err := s.SpotifyClient.UserFromToken(req.Context(), token)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		log.Printf("ERROR registering sharer: %s\n", err)
+		return
+	}
+	s.Cfg.Lock()
+	defer s.Cfg.Unlock()
+	if !stringSliceContains(s.Cfg.Admins, user.ID) {
+		http.Error(w, "must be an admin", http.StatusUnauthorized)
+		fmt.Printf("%v, %v", s.Cfg.Admins, user.ID)
+		return
+	}
+	if stringSliceContains(s.Cfg.PermittedSharers, sharer) {
+		fmt.Fprintf(w, "%s already permitted", sharer)
+		return
+	}
+	s.Cfg.PermittedSharers = append(s.Cfg.PermittedSharers, sharer)
+	s.Cfg.Save()
+	fmt.Fprintf(w, "permitted %s to register as a sharer", sharer)
 }
 
 func (s *SpotifySyncServer) Sync(w http.ResponseWriter, req *http.Request) {
@@ -103,6 +159,7 @@ func (s *SpotifySyncServer) RegisterHandlers() {
 	http.HandleFunc("/currentTrack", s.CurrentTrack)
 	http.HandleFunc("/login", s.Login)
 	http.HandleFunc("/spotifyCallback", s.Callback)
+	http.HandleFunc("/permitSharer", s.PermitSharer)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
 }
 
@@ -122,6 +179,30 @@ func setTokenCookies(w http.ResponseWriter, token *oauth2.Token) {
 	})
 }
 
+func tokenFromCookies(req *http.Request) (*oauth2.Token, error) {
+	accessTokenCookie, err := req.Cookie("access_token")
+	if err != nil {
+		return nil, fmt.Errorf("no logged in user")
+	}
+	refreshTokenCookie, err := req.Cookie("refresh_token")
+	if err != nil {
+		return nil, fmt.Errorf("no logged in user")
+	}
+	expiryCookie, err := req.Cookie("expiry")
+	if err != nil {
+		return nil, fmt.Errorf("no logged in user")
+	}
+	expiryUnixSeconds, err := strconv.Atoi(expiryCookie.Value)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse token expiry")
+	}
+	return &oauth2.Token{
+		AccessToken:  accessTokenCookie.Value,
+		RefreshToken: refreshTokenCookie.Value,
+		Expiry:       time.Unix(int64(expiryUnixSeconds), 0),
+	}, nil
+}
+
 func generateRandomState() string {
 	charset := "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	b := make([]byte, 16)
@@ -129,4 +210,13 @@ func generateRandomState() string {
 		b[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(b)
+}
+
+func stringSliceContains(ss []string, v string) bool {
+	for _, s := range ss {
+		if s == v {
+			return true
+		}
+	}
+	return false
 }

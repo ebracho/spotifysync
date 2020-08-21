@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"golang.org/x/oauth2"
 )
 
 // Refresh current track data only after 10 seconds
@@ -26,13 +28,13 @@ type CurrentTrack struct {
 }
 
 type SpotifyClient struct {
-	Cfg Config
+	Cfg *Config
 
 	cacheMu sync.Mutex
 	cache   map[string]CurrentTrack
 }
 
-func NewSpotifyClient(cfg Config) *SpotifyClient {
+func NewSpotifyClient(cfg *Config) *SpotifyClient {
 	return &SpotifyClient{
 		Cfg:   cfg,
 		cache: make(map[string]CurrentTrack),
@@ -40,8 +42,10 @@ func NewSpotifyClient(cfg Config) *SpotifyClient {
 }
 
 func (c *SpotifyClient) currentlyPlaying(ctx context.Context, user User) (CurrentTrack, error) {
-	req, _ := http.NewRequest("GET", "https://api.spotify.com/v1/me/player/currently-playing", nil)
+	c.Cfg.Lock()
 	client := c.Cfg.Oauth2Cfg.Client(ctx, user.Token)
+	c.Cfg.Unlock()
+	req, _ := http.NewRequest("GET", "https://api.spotify.com/v1/me/player/currently-playing", nil)
 	res, err := client.Do(req)
 	if err != nil {
 		return CurrentTrack{}, fmt.Errorf("error fetching currently-playing: %w", err)
@@ -52,7 +56,6 @@ func (c *SpotifyClient) currentlyPlaying(ctx context.Context, user User) (Curren
 	if res.StatusCode != 200 {
 		return CurrentTrack{}, fmt.Errorf("received non-200 code from currently-playing: %d", res.StatusCode)
 	}
-
 	ct := CurrentTrack{}
 	if err := json.NewDecoder(res.Body).Decode(&ct); err != nil {
 		return CurrentTrack{}, fmt.Errorf("error decoding currently-playing response: %w", err)
@@ -80,4 +83,24 @@ func (c *SpotifyClient) CurrentlyPlaying(ctx context.Context, user User) (Curren
 
 func (c *SpotifyClient) shouldRefreshCurrentTrack(t CurrentTrack) bool {
 	return time.Unix(t.Fetched, 0).Add(currentTrackTTL).Before(time.Now())
+}
+
+func (c *SpotifyClient) UserFromToken(ctx context.Context, t *oauth2.Token) (User, error) {
+	c.Cfg.Lock()
+	client := c.Cfg.Oauth2Cfg.Client(ctx, t)
+	c.Cfg.Unlock()
+	req, _ := http.NewRequest("GET", "https://api.spotify.com/v1/me", nil)
+	res, err := client.Do(req)
+	if err != nil {
+		return User{}, fmt.Errorf("error fetching user info: %w", err)
+	}
+	if res.StatusCode != 200 {
+		return User{}, fmt.Errorf("received non-200 code from spotify userinfo: %d", res.StatusCode)
+	}
+	user := User{Token: t}
+	if err := json.NewDecoder(res.Body).Decode(&user); err != nil {
+		return User{}, fmt.Errorf("error decoding user response: %w", err)
+	}
+	return user, nil
+
 }
