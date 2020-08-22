@@ -1,3 +1,3 @@
 #!/bin/bash +x
 docker build . -t spotifysync:latest
-docker run -p 8999:8999 -v "$(PWD)/config.json":/app/config.json -v "$(PWD)/certs/":/app/certs/ spotifysync:latest
+docker run -p 80:80 -p 443:443 -v "$(pwd)/config.json":/app/config.json -v "$(pwd)/certs/":/app/certs/ -d --name spotifysync spotifysync:latest

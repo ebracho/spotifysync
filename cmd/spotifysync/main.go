@@ -39,8 +39,8 @@ func serveProd() {
 
 	certManager := autocert.Manager{
 		Prompt:     autocert.AcceptTOS,
-		HostPolicy: autocert.HostWhitelist("example.com"), //Your domain here
-		Cache:      autocert.DirCache("certs"),            //Folder for storing certificates
+		HostPolicy: autocert.HostWhitelist(cfg.Host),
+		Cache:      autocert.DirCache("certs"),
 	}
 	server := &http.Server{
 		Addr:    ":https",
@@ -57,8 +57,10 @@ func serveProd() {
 
 func main() {
 	if _, err := os.Stat("certs"); err == nil {
+		log.Println("serving (prod)")
 		serveProd()
 	} else {
+		log.Println("serving (local)")
 		serveLocal()
 	}
 }

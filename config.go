@@ -21,6 +21,7 @@ type Config struct {
 	RegisteredUsers  map[string]User `json:"registeredUsers"` // Users who are permitted to share music
 	Oauth2Cfg        oauth2.Config
 	ListenAddress    string
+	Host             string
 	Filepath         string `json:"-"`
 }
 
