@@ -89,8 +89,9 @@ func (s *SpotifySyncServer) Callback(w http.ResponseWriter, req *http.Request) {
 	setTokenCookies(w, token)
 
 	next, err := req.Cookie("nextSyncUser")
-	if err != nil {
+	if next == nil || err != nil {
 		http.Redirect(w, req, "/", http.StatusSeeOther)
+		return
 	}
 	http.Redirect(w, req, fmt.Sprintf("/sync?user=%s", next.Value), http.StatusSeeOther)
 
