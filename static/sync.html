@@ -21,7 +21,7 @@
     <p id="album"></p>
     <p id="song"></p>
     <p id="progress"></p>
-    <input type="range" id="volume" name="volume" min="0" max="20"></input>
+    <input type="range" id="volume" name="volume" min="0" max="200"></input>
   </div>
 
   <script src="https://sdk.scdn.co/spotify-player.js"></script>
@@ -117,9 +117,9 @@
 
         // Intialize volume and add listener to slider
         volSlider = document.getElementById('volume')
-        player.setVolume(volSlider.value / (volSlider.max - volSlider.min))
+        player.setVolume((volSlider.value / (volSlider.max - volSlider.min))/4)
         document.getElementById('volume').oninput = function () {
-          player.setVolume(this.value / (this.max - this.min))
+          player.setVolume((this.value / (this.max - this.min))/4) // Actual max volume is loud af, cap at 25%
           localStorage.setItem('volume', this.value)
         }
 
