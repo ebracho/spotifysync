@@ -103,11 +103,11 @@ func (s *SpotifySyncServer) Callback(w http.ResponseWriter, req *http.Request) {
 	}
 	s.Cfg.Lock()
 	defer s.Cfg.Unlock()
-	if !stringSliceContains(s.Cfg.PermittedSharers, user.ID) {
+	if !stringSliceContains(s.Cfg.PermittedSharers, user.DisplayName) {
 		return
 	}
-	if _, ok := s.Cfg.RegisteredUsers[user.ID]; !ok {
-		s.Cfg.RegisteredUsers[user.ID] = user
+	if _, ok := s.Cfg.RegisteredUsers[user.DisplayName]; !ok {
+		s.Cfg.RegisteredUsers[user.DisplayName] = user
 		s.Cfg.Save()
 	}
 }
@@ -132,9 +132,9 @@ func (s *SpotifySyncServer) PermitSharer(w http.ResponseWriter, req *http.Reques
 	}
 	s.Cfg.Lock()
 	defer s.Cfg.Unlock()
-	if !stringSliceContains(s.Cfg.Admins, user.ID) {
+	if !stringSliceContains(s.Cfg.Admins, user.DisplayName) {
 		http.Error(w, "must be an admin", http.StatusUnauthorized)
-		fmt.Printf("%v, %v", s.Cfg.Admins, user.ID)
+		fmt.Printf("%v, %v", s.Cfg.Admins, user.DisplayName)
 		return
 	}
 	if stringSliceContains(s.Cfg.PermittedSharers, sharer) {

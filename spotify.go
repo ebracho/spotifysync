@@ -67,7 +67,7 @@ func (c *SpotifyClient) currentlyPlaying(ctx context.Context, user User) (Curren
 func (c *SpotifyClient) CurrentlyPlaying(ctx context.Context, user User) (CurrentTrack, error) {
 	c.cacheMu.Lock()
 	defer c.cacheMu.Unlock()
-	cached, ok := c.cache[user.ID]
+	cached, ok := c.cache[user.DisplayName]
 	if ok && !c.shouldRefreshCurrentTrack(cached) {
 		// cached, return early
 		return cached, nil
@@ -77,7 +77,7 @@ func (c *SpotifyClient) CurrentlyPlaying(ctx context.Context, user User) (Curren
 	if err != nil {
 		return CurrentTrack{}, err
 	}
-	c.cache[user.ID] = ct
+	c.cache[user.DisplayName] = ct
 	return ct, nil
 }
 

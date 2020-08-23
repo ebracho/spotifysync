@@ -10,8 +10,8 @@ import (
 )
 
 type User struct {
-	ID    string        `json:"id"` // Spotify user id
-	Token *oauth2.Token // Spotify oauth token
+	DisplayName string        `json:"display_name"` // Spotify display_name
+	Token       *oauth2.Token // Spotify oauth token
 }
 
 type Config struct {
