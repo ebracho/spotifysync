@@ -160,6 +160,7 @@
                   return
                 }
                 if (!remote.is_playing && !state.paused) {
+                  player.pause()
                   return
                 }
                 if (state.paused
