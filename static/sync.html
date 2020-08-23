@@ -20,6 +20,7 @@
     <p id="artist"></p>
     <p id="album"></p>
     <p id="song"></p>
+    <p id="progress"></p>
     <input type="range" id="volume" name="volume" min="0" max="20"></input>
   </div>
 
@@ -62,6 +63,13 @@
       return getCookie('access_token');
     }
 
+    // Convert a millisecond duration to a string represention of 'mm:ss'
+    function msToMinSeconds(ms) {
+        let minutes = Math.floor(ms/60000)
+        let seconds = Math.floor((ms%60000)/1000)
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`
+    }
+
     // Fetch metadata about track currently being played by the user we're syncing to
     async function currentlyPlaying() {
       let response = await fetch('/currentTrack?user=' + user());
@@ -89,6 +97,7 @@
 
       // Playback status updates
       player.addListener('player_state_changed', state => {
+        console.log(state)
         if (!state || state.paused) {
           document.getElementById('not-playing').style.display = 'block'
           document.getElementById("albumart").src = ''
@@ -112,6 +121,18 @@
         document.getElementById('volume').oninput = function () {
           player.setVolume(this.value / (this.max - this.min))
         }
+
+        // Set interval function to keep song position/duration UI elment synced
+        function syncProgress() {
+            player.getCurrentState().then(state => {
+                if (!state || !state.position || !state.duration) {
+                  document.getElementById("progress").innerHTML = ''
+                } else {
+                  document.getElementById("progress").innerHTML = `${msToMinSeconds(state.position)} / ${msToMinSeconds(state.duration)}`
+                }
+            })
+        }
+        setInterval(syncProgress, 500)
 
         function setTrack(uri, position_ms) {
           fetch(`https://api.spotify.com/v1/me/player/play?device_id=${device_id}`, {
